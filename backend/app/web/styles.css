@@ -69,6 +69,16 @@ main {
   gap: 8px;
   margin-top: 8px;
 }
+.stack-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+#upload-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
 button {
   border: 1px solid #2f6f75;
   background: #0f5a64;
@@ -77,12 +87,17 @@ button {
   padding: 8px 10px;
   cursor: pointer;
 }
-input {
+button.secondary {
+  background: #e9f4f6;
+  color: #114149;
+}
+input,
+select {
   border-radius: 6px;
   border: 1px solid #c7b79f;
   padding: 8px;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 @media (max-width: 920px) {
   main {

@@ -1,14 +1,15 @@
 ﻿from datetime import datetime, timezone
-import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.settings import get_settings
 from app.db.session import get_db
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
+    DevLoginIn,
     GoogleCodeIn,
     MagicLinkConsumeIn,
     MagicLinkRequestIn,
@@ -23,6 +24,7 @@ from app.services.telegram_auth import verify_telegram_login
 
 
 router = APIRouter()
+settings = get_settings()
 
 
 @router.post("/telegram", response_model=TokenPair)
@@ -92,6 +94,14 @@ def refresh(payload: RefreshIn, db: Session = Depends(get_db)) -> TokenPair:
 
     row.revoked = True
     db.commit()
+    return TokenPair(access_token=create_access_token(user), refresh_token=create_refresh_token(db, user))
+
+
+@router.post("/dev/login", response_model=TokenPair)
+def dev_login(payload: DevLoginIn, db: Session = Depends(get_db)) -> TokenPair:
+    if settings.app_env.lower() == "prod":
+        raise HTTPException(status_code=404, detail="Not found")
+    user = create_or_get_user_by_email(db, payload.email)
     return TokenPair(access_token=create_access_token(user), refresh_token=create_refresh_token(db, user))
 
 

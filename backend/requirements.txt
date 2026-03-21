@@ -1,0 +1,17 @@
+﻿fastapi==0.116.1
+uvicorn[standard]==0.35.0
+sqlalchemy==2.0.44
+psycopg[binary]==3.2.11
+pydantic-settings==2.10.1
+python-multipart==0.0.20
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+email-validator==2.2.0
+httpx==0.28.1
+ebooklib==0.19
+lxml==6.0.1
+pypdf==5.9.0
+aiosmtplib==4.0.1
+python-dateutil==2.9.0.post0
+pytest==8.4.2
+pytest-asyncio==1.2.0

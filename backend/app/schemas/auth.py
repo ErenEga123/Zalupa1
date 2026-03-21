@@ -39,3 +39,7 @@ class MagicLinkConsumeIn(BaseModel):
 
 class RefreshIn(BaseModel):
     refresh_token: str
+
+
+class DevLoginIn(BaseModel):
+    email: EmailStr

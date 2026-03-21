@@ -98,3 +98,46 @@ Included tests cover health, config, startup init, extraction, duplicate handlin
 For production bot-to-backend auth, set `BOT_API_TOKEN` in `.env` to a long random secret (for example from `openssl rand -hex 32`).
 The backend accepts this token as a service credential and maps it to `BOT_SERVICE_EMAIL` user.
 Use the same `BOT_API_TOKEN` value in both `backend` and `bot` services.
+
+## Local verification (quick path)
+
+1. Start backend + postgres (bot optional for this check):
+
+```bash
+docker compose up -d --build postgres backend
+```
+
+2. Open `http://localhost:8000/app`.
+3. In **Profile / Auth**, enter any email and click **Dev Login** (works when `APP_ENV!=prod`).
+4. In **Add Book**, choose `.epub/.fb2/.pdf` and click **Upload Book**.
+5. Wait a few seconds, refresh library, open the book and verify chapters load.
+
+### Automated smoke check
+
+PowerShell (Windows):
+
+```powershell
+./scripts/local_smoke.ps1
+```
+
+Bash (Linux/macOS):
+
+```bash
+bash ./scripts/local_smoke.sh
+```
+
+Smoke check validates:
+- health endpoint
+- dev login
+- upload flow
+- processing transition to `ready`
+- processed chapters endpoint availability
+
+## Website upload flow
+
+The web app now supports direct upload from `/app`:
+- metadata fields: title, author, series, visibility
+- file picker with EPUB/FB2/PDF
+- upload uses `POST /api/v1/books/upload`
+- library auto-refreshes after enqueue
+- reader still uses processed chapter/page endpoints only

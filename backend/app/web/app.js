@@ -72,6 +72,11 @@ function authHeaders() {
   return state.token ? { Authorization: `Bearer ${state.token}` } : {};
 }
 
+function setToken(accessToken) {
+  state.token = accessToken;
+  localStorage.setItem(TOKEN_KEY, accessToken);
+}
+
 async function authMagic() {
   const email = document.getElementById('email').value.trim();
   if (!email) return;
@@ -81,6 +86,27 @@ async function authMagic() {
     body: JSON.stringify({ email }),
   });
   alert('Magic link sent (or simulated if SMTP disabled).');
+}
+
+async function authDevLogin() {
+  const email = document.getElementById('email').value.trim();
+  if (!email) {
+    alert('Enter email first');
+    return;
+  }
+  const resp = await fetch('/api/v1/auth/dev/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!resp.ok) {
+    alert('Dev login failed (disabled in prod env).');
+    return;
+  }
+  const data = await resp.json();
+  setToken(data.access_token);
+  setStatus('Logged in');
+  await fetchLibrary();
 }
 
 async function applyTokenFromUrl() {
@@ -93,13 +119,12 @@ async function applyTokenFromUrl() {
   });
   if (!resp.ok) return;
   const data = await resp.json();
-  state.token = data.access_token;
-  localStorage.setItem(TOKEN_KEY, state.token);
+  setToken(data.access_token);
   history.replaceState({}, '', '/app');
 }
 
 async function fetchLibrary() {
-  let resp = await fetch('/api/v1/library?page=1&page_size=50', { headers: authHeaders() });
+  const resp = await fetch('/api/v1/library?page=1&page_size=50', { headers: authHeaders() });
   if (!resp.ok) {
     const offlineBooks = await idbGetAll('books');
     renderLibrary(offlineBooks.map((b) => ({ ...b, status: b.status || 'cached' })));
@@ -121,6 +146,49 @@ function renderLibrary(items) {
     row.querySelector('button').addEventListener('click', () => openBook(book.id));
     container.appendChild(row);
   });
+}
+
+async function uploadBookFromSite(event) {
+  event.preventDefault();
+
+  if (!state.token) {
+    alert('Login first (Magic Link or Dev Login).');
+    return;
+  }
+
+  const fileInput = document.getElementById('upload-file');
+  const file = fileInput.files?.[0];
+  if (!file) {
+    alert('Choose a book file first.');
+    return;
+  }
+
+  const form = new FormData();
+  form.append('title', document.getElementById('upload-title').value.trim() || file.name.replace(/\.[^/.]+$/, ''));
+  form.append('author', document.getElementById('upload-author').value.trim() || 'Unknown');
+  form.append('series', document.getElementById('upload-series').value.trim());
+  form.append('visibility', document.getElementById('upload-visibility').value);
+  form.append('file', file);
+
+  setStatus('Uploading book...');
+  const resp = await fetch('/api/v1/books/upload', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: form,
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    setStatus('Upload failed');
+    alert(`Upload failed: ${txt}`);
+    return;
+  }
+
+  const result = await resp.json();
+  setStatus(result.duplicate ? 'Duplicate reused' : 'Uploaded and queued');
+  fileInput.value = '';
+  await fetchLibrary();
+  window.setTimeout(fetchLibrary, 3000);
 }
 
 async function openBook(bookId) {
@@ -152,7 +220,7 @@ async function openBook(bookId) {
 
   state.chapters = chapters.sort((a, b) => a.order_index - b.order_index);
   if (!state.chapters.length) {
-    setStatus('No chapters found');
+    setStatus('No chapters found (processing still running?)');
     return;
   }
 
@@ -244,6 +312,8 @@ async function flushProgressQueue() {
 
 function bindControls() {
   document.getElementById('send-magic').addEventListener('click', authMagic);
+  document.getElementById('dev-login').addEventListener('click', authDevLogin);
+  document.getElementById('upload-form').addEventListener('submit', uploadBookFromSite);
   document.getElementById('reader-content').addEventListener('scroll', () => {
     window.clearTimeout(window.__saveTimer);
     window.__saveTimer = setTimeout(saveProgress, 300);
@@ -251,12 +321,14 @@ function bindControls() {
 
   document.getElementById('prev').addEventListener('click', async () => {
     const cur = state.chapters.find((x) => x.id === state.currentChapterId);
+    if (!cur) return;
     const prev = state.chapters.find((x) => x.order_index === cur.order_index - 1);
     if (prev) await openChapter(prev.id);
   });
 
   document.getElementById('next').addEventListener('click', async () => {
     const cur = state.chapters.find((x) => x.id === state.currentChapterId);
+    if (!cur) return;
     const next = state.chapters.find((x) => x.order_index === cur.order_index + 1);
     if (next) await openChapter(next.id);
   });
