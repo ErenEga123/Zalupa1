@@ -141,3 +141,23 @@ The web app now supports direct upload from `/app`:
 - upload uses `POST /api/v1/books/upload`
 - library auto-refreshes after enqueue
 - reader still uses processed chapter/page endpoints only
+
+## SQLite test mode (without Postgres)
+
+For quick local testing you can run backend on SQLite only:
+
+```bash
+docker compose --profile sqlite-test up -d --build backend_sqlite
+```
+
+Endpoints in this mode:
+- App: `http://localhost:8001/app`
+- Health: `http://localhost:8001/health`
+
+PowerShell smoke-check against SQLite mode:
+
+```powershell
+./scripts/local_smoke.ps1 -BaseUrl http://localhost:8001
+```
+
+This mode is for local verification only. Production should stay on PostgreSQL.

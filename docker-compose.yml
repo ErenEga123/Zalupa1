@@ -30,6 +30,24 @@
       - ./temp:/data/temp
       - ./backend:/app
 
+  backend_sqlite:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: sqlite+pysqlite:////data/temp/reader-test.db
+      APP_ENV: dev
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./library:/data/library
+      - ./temp:/data/temp
+      - ./backend:/app
+    profiles:
+      - sqlite-test
+
   bot:
     build:
       context: .

@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-import shutil
 import zipfile
 from xml.etree import ElementTree as ET
 
@@ -157,17 +156,23 @@ class BookProcessor:
 
 
 def claim_next_task(db: Session) -> ProcessingTask | None:
-    task = db.scalar(
+    query = (
         select(ProcessingTask)
         .where(
             ProcessingTask.status.in_([ProcessingStatus.pending, ProcessingStatus.failed]),
             ProcessingTask.attempt_count < settings.processing_max_attempts,
         )
         .order_by(ProcessingTask.updated_at.asc())
-        .with_for_update(skip_locked=True)
     )
+
+    dialect_name = getattr(db.bind.dialect, "name", "") if db.bind else ""
+    if dialect_name != "sqlite":
+        query = query.with_for_update(skip_locked=True)
+
+    task = db.scalar(query)
     if not task:
         return None
+
     task.status = ProcessingStatus.processing
     db.commit()
     db.refresh(task)
