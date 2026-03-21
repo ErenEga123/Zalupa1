@@ -92,3 +92,9 @@ pytest -q
 ```
 
 Included tests cover health, config, startup init, extraction, duplicate handling, access control, progress anti-regression, concurrent-ish progress ordering behavior, upload size limits, invalid EPUB handling, auth behavior, processing transitions/retry, and queue resume semantics.
+
+## BOT_API_TOKEN setup (persistent)
+
+For production bot-to-backend auth, set `BOT_API_TOKEN` in `.env` to a long random secret (for example from `openssl rand -hex 32`).
+The backend accepts this token as a service credential and maps it to `BOT_SERVICE_EMAIL` user.
+Use the same `BOT_API_TOKEN` value in both `backend` and `bot` services.
