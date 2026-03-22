@@ -5,16 +5,30 @@ def test_upload_size_limit(client, monkeypatch):
     c, _ = client
     from app.api.v1 import books as books_module
 
+    old_limit = books_module.settings.max_book_size_mb
     books_module.settings.max_book_size_mb = 0
-    data = {
-        "title": "X",
-        "author": "Y",
-        "visibility": "private",
-    }
-    files = {"file": ("x.fb2", BytesIO(b"<fb2></fb2>"), "application/octet-stream")}
+    try:
+        data = {
+            "title": "X",
+            "author": "Y",
+            "visibility": "private",
+        }
+        files = {"file": ("x.fb2", BytesIO(b"<fb2></fb2>"), "application/octet-stream")}
 
-    resp = c.post("/api/v1/books/upload", data=data, files=files)
-    assert resp.status_code == 413
+        resp = c.post("/api/v1/books/upload", data=data, files=files)
+        assert resp.status_code == 413
+    finally:
+        books_module.settings.max_book_size_mb = old_limit
+
+
+def test_upload_file_only_mode(client):
+    c, _ = client
+    payload = b"<?xml version='1.0'?><FictionBook xmlns='http://www.gribuser.ru/xml/fictionbook/2.0'><body><section><p>a</p></section></body></FictionBook>"
+    resp = c.post(
+        "/api/v1/books/upload",
+        files={"file": ("simple_book.fb2", payload, "application/octet-stream")},
+    )
+    assert resp.status_code == 200
 
 
 def test_duplicate_detection_by_sha256(client, tmp_path):

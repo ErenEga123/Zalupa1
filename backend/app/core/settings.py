@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     bot_service_email: str = "bot-service@local"
     backend_base_url: str = "http://backend:8000"
     telegram_bot_username: str = ""
+    telegram_admin_ids: str = ""
 
     jwt_secret: str = Field(default="change-me", min_length=12)
     jwt_access_ttl_seconds: int = 900

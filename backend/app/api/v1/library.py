@@ -2,7 +2,7 @@
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, is_admin_user
 from app.db.session import get_db
 from app.models.book import Book, BookVisibility, ProcessingTask
 from app.models.user import Favorite, User
@@ -23,7 +23,11 @@ def list_library(
 ) -> PagedBooks:
     offset = (page - 1) * page_size
 
-    query = select(Book).where(or_(Book.owner_id == user.id, Book.visibility == BookVisibility.shared))
+    if is_admin_user(user):
+        query = select(Book)
+    else:
+        query = select(Book).where(or_(Book.owner_id == user.id, Book.visibility == BookVisibility.shared))
+
     if visibility in {"private", "shared"}:
         query = query.where(Book.visibility == visibility)
     if q:

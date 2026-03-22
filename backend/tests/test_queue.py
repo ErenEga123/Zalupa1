@@ -39,7 +39,8 @@ def test_queue_resume_behavior_after_restart(client):
         book = Book(title="Q", author="A", file_type=BookFileType.fb2, visibility=BookVisibility.private, owner_id=user.id)
         db.add(book)
         db.flush()
-        db.add(ProcessingTask(book_id=book.id, status=ProcessingStatus.processing, attempt_count=1))
+        book_id = book.id
+        db.add(ProcessingTask(book_id=book_id, status=ProcessingStatus.processing, attempt_count=1))
         db.commit()
 
     import asyncio
@@ -49,5 +50,5 @@ def test_queue_resume_behavior_after_restart(client):
     asyncio.run(runner.stop())
 
     with Session() as db:
-        status = db.scalar(select(ProcessingTask.status).where(ProcessingTask.book_id == book.id))
+        status = db.scalar(select(ProcessingTask.status).where(ProcessingTask.book_id == book_id))
         assert status in {ProcessingStatus.pending, ProcessingStatus.failed, ProcessingStatus.ready, ProcessingStatus.processing}

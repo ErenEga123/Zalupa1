@@ -32,10 +32,19 @@ def issue_magic_link(db: Session, user: User) -> str:
     return token
 
 
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def consume_magic_link(db: Session, token: str) -> User | None:
     row = db.scalar(select(EmailMagicLinkToken).where(EmailMagicLinkToken.token == token))
     now = datetime.now(timezone.utc)
-    if not row or row.used_at is not None or row.expires_at < now:
+    expires_at = _as_utc(row.expires_at) if row else None
+    if not row or row.used_at is not None or (expires_at is not None and expires_at < now):
         return None
     row.used_at = now
     user = db.get(User, row.user_id)

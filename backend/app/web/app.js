@@ -109,6 +109,60 @@ async function authDevLogin() {
   await fetchLibrary();
 }
 
+async function authTelegramUser(user) {
+  const payload = {
+    id: user.id,
+    first_name: user.first_name || null,
+    username: user.username || null,
+    auth_date: user.auth_date,
+    hash: user.hash,
+  };
+  const resp = await fetch('/api/v1/auth/telegram', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    alert('Telegram auth failed. Check BOT_TOKEN / TELEGRAM_BOT_USERNAME.');
+    return;
+  }
+  const data = await resp.json();
+  setToken(data.access_token);
+  setStatus('Logged in via Telegram');
+  await fetchLibrary();
+}
+
+async function renderTelegramWidget() {
+  const target = document.getElementById('telegram-login');
+  if (!target) return;
+
+  target.innerHTML = '';
+  const resp = await fetch('/api/v1/auth/telegram/widget');
+  if (!resp.ok) {
+    target.textContent = 'Telegram widget unavailable';
+    return;
+  }
+  const cfg = await resp.json();
+  if (!cfg.enabled || !cfg.bot_username) {
+    target.textContent = 'Telegram login not configured';
+    return;
+  }
+
+  window.onTelegramAuth = (user) => {
+    authTelegramUser(user);
+  };
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = 'https://telegram.org/js/telegram-widget.js?22';
+  script.setAttribute('data-telegram-login', cfg.bot_username);
+  script.setAttribute('data-size', 'large');
+  script.setAttribute('data-userpic', 'false');
+  script.setAttribute('data-request-access', 'write');
+  script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+  target.appendChild(script);
+}
+
 async function applyTokenFromUrl() {
   const token = new URLSearchParams(window.location.search).get('token');
   if (!token) return;
@@ -152,7 +206,7 @@ async function uploadBookFromSite(event) {
   event.preventDefault();
 
   if (!state.token) {
-    alert('Login first (Magic Link or Dev Login).');
+    alert('Login first');
     return;
   }
 
@@ -164,10 +218,6 @@ async function uploadBookFromSite(event) {
   }
 
   const form = new FormData();
-  form.append('title', document.getElementById('upload-title').value.trim() || file.name.replace(/\.[^/.]+$/, ''));
-  form.append('author', document.getElementById('upload-author').value.trim() || 'Unknown');
-  form.append('series', document.getElementById('upload-series').value.trim());
-  form.append('visibility', document.getElementById('upload-visibility').value);
   form.append('file', file);
 
   setStatus('Uploading book...');
@@ -345,6 +395,7 @@ async function init() {
     await navigator.serviceWorker.register('/sw.js');
   }
   await applyTokenFromUrl();
+  await renderTelegramWidget();
   bindControls();
   if (state.token) {
     await fetchLibrary();

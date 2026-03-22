@@ -21,16 +21,10 @@
           <button id="send-magic">Send Magic Link</button>
           <button id="dev-login" class="secondary">Dev Login</button>
         </div>
+        <div id="telegram-login" class="telegram-login"></div>
 
         <h2>Add Book</h2>
         <form id="upload-form">
-          <input id="upload-title" placeholder="Book title" required />
-          <input id="upload-author" placeholder="Author" value="Unknown" />
-          <input id="upload-series" placeholder="Series (optional)" />
-          <select id="upload-visibility">
-            <option value="private" selected>Private</option>
-            <option value="shared">Shared</option>
-          </select>
           <input id="upload-file" type="file" accept=".epub,.fb2,.pdf" required />
           <button type="submit">Upload Book</button>
         </form>

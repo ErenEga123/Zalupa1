@@ -7,12 +7,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, is_admin_user
 from app.core.settings import get_settings
 from app.db.session import get_db
 from app.models.book import Book, BookFile, BookFileType, BookVisibility, Chapter, ProcessingStatus, ProcessingTask
 from app.models.user import User
-from app.schemas.books import BookCreateResult, ChapterContentOut, ChapterOut
+from app.schemas.books import BookCreateResult, BookVisibilityIn, ChapterContentOut, ChapterOut
 from app.services.metadata_service import extract_metadata
 from app.services.storage_service import get_book_paths
 
@@ -22,13 +22,13 @@ settings = get_settings()
 
 
 def _can_access(book: Book, user: User) -> bool:
-    return book.owner_id == user.id or book.visibility == BookVisibility.shared
+    return book.owner_id == user.id or book.visibility == BookVisibility.shared or is_admin_user(user)
 
 
 @router.post("/upload", response_model=BookCreateResult)
 async def upload_book(
-    title: str = Form(...),
-    author: str = Form("Unknown"),
+    title: str | None = Form(None),
+    author: str | None = Form(None),
     series: str | None = Form(None),
     visibility: str = Form("private"),
     file: UploadFile = File(...),
@@ -58,7 +58,8 @@ async def upload_book(
             out.write(chunk)
 
     parsed = extract_metadata(tmp, suffix)
-    resolved_title = (parsed.title or title or Path(file.filename or "").stem or "Untitled").strip()
+    fallback_title = Path(file.filename or "").stem or "Untitled"
+    resolved_title = (parsed.title or title or fallback_title).strip()
     resolved_author = (parsed.author or author or "Unknown").strip()
     resolved_series = (parsed.series or series or "").strip() or None
 
@@ -66,7 +67,7 @@ async def upload_book(
     existing = db.scalar(select(BookFile).where(BookFile.sha256 == sha256))
     if existing:
         existing_book = db.get(Book, existing.book_id)
-        if existing_book and (existing_book.owner_id == user.id or existing_book.visibility == BookVisibility.shared):
+        if existing_book and (existing_book.owner_id == user.id or existing_book.visibility == BookVisibility.shared or is_admin_user(user)):
             tmp.unlink(missing_ok=True)
             return BookCreateResult(book_id=existing_book.id, duplicate=True, message="Duplicate file detected; using existing import")
 
@@ -166,6 +167,24 @@ def download_original(book_id: str, db: Session = Depends(get_db), user: User = 
         raise HTTPException(status_code=404, detail="File missing")
     path = Path(book_file.original_path)
     return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+
+
+@router.patch("/{book_id}/visibility")
+def update_visibility(
+    book_id: str,
+    payload: BookVisibilityIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    book = db.get(Book, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.owner_id != user.id and not is_admin_user(user):
+        raise HTTPException(status_code=403, detail="Only owner/admin can change visibility")
+
+    book.visibility = BookVisibility(payload.visibility)
+    db.commit()
+    return {"ok": True, "book_id": book.id, "visibility": book.visibility.value}
 
 
 @router.get("/{book_id}/cover")

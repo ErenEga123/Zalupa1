@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = 'reader-system-v2';
+﻿const CACHE_NAME = 'reader-system-v3';
 const APP_SHELL = ['/app', '/app/styles.css', '/app/app.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -35,3 +35,4 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(staleWhileRevalidate(event.request));
   }
 });
+

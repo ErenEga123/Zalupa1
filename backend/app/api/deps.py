@@ -1,4 +1,4 @@
-﻿from fastapi import Depends, HTTPException, Security
+﻿from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,6 +13,15 @@ bearer = HTTPBearer(auto_error=False)
 settings = get_settings()
 
 
+def _telegram_admin_set() -> set[str]:
+    raw = settings.telegram_admin_ids or ""
+    return {x.strip() for x in raw.split(",") if x.strip()}
+
+
+def is_admin_user(user: User) -> bool:
+    return bool(user.telegram_id and user.telegram_id in _telegram_admin_set())
+
+
 def _get_or_create_bot_service_user(db: Session) -> User:
     user = db.scalar(select(User).where(User.email == settings.bot_service_email))
     if user:
@@ -24,7 +33,19 @@ def _get_or_create_bot_service_user(db: Session) -> User:
     return user
 
 
+def _get_or_create_telegram_user(db: Session, telegram_id: str) -> User:
+    user = db.scalar(select(User).where(User.telegram_id == telegram_id))
+    if user:
+        return user
+    user = User(telegram_id=telegram_id)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def get_current_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Security(bearer),
     db: Session = Depends(get_db),
 ) -> User:
@@ -35,6 +56,9 @@ def get_current_user(
 
     # Persistent service token path for Telegram bot integration.
     if settings.bot_api_token and token == settings.bot_api_token:
+        tg_user_id = request.headers.get("X-Telegram-User-Id", "").strip()
+        if tg_user_id:
+            return _get_or_create_telegram_user(db, tg_user_id)
         return _get_or_create_bot_service_user(db)
 
     try:

@@ -53,5 +53,9 @@ class FavoriteToggleIn(BaseModel):
     favorite: bool
 
 
+class BookVisibilityIn(BaseModel):
+    visibility: Literal["private", "shared"]
+
+
 class SubscriptionIn(BaseModel):
     owner_id: str

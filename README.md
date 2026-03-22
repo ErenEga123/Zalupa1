@@ -195,3 +195,41 @@ This mode is for local verification only. Production should stay on PostgreSQL.
 Заполняется только если реально используешь эти способы входа:
 - Google: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`
+
+## Обновление: загрузка только файлом + Telegram auth + Telegram admin
+
+- В вебе `/app` форма **Add Book** упрощена: теперь только выбор файла (`.epub/.fb2/.pdf`) и `Upload Book`.
+- Метаданные (`title`, `author`, `series`) читаются из файла автоматически при импорте (EPUB/FB2/PDF), а не руками из формы.
+- Добавлен Telegram Login Widget в веб-приложение:
+  - backend endpoint: `GET /api/v1/auth/telegram/widget`
+  - auth endpoint: `POST /api/v1/auth/telegram`
+
+### Telegram администратор
+
+Задается через `.env`:
+
+```env
+TELEGRAM_ADMIN_IDS=123456789,987654321
+```
+
+- это `telegram_id` пользователей (из Telegram)
+- admin видит всю библиотеку и может менять visibility книг (в т.ч. через бота)
+
+### Настройки Telegram для входа в вебе
+
+В `.env`:
+
+```env
+BOT_TOKEN=<token from BotFather>
+TELEGRAM_BOT_USERNAME=<bot_username_without_@>
+BOT_API_TOKEN=<long service token>
+```
+
+### Telegram бот: работа с библиотекой
+
+- `/library` — список и кнопки управления
+- кнопки для книги:
+  - добавить/убрать из избранного
+  - сделать shared/private
+- загрузка книги отправкой документа в чат
+- бот работает от Telegram пользователя через `X-Telegram-User-Id` + `BOT_API_TOKEN`

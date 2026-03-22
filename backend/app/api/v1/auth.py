@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, is_admin_user
 from app.core.settings import get_settings
 from app.db.session import get_db
 from app.models.user import RefreshToken, User
@@ -42,6 +42,14 @@ def telegram_auth(payload: TelegramAuthIn, db: Session = Depends(get_db)) -> Tok
         db.refresh(user)
 
     return TokenPair(access_token=create_access_token(user), refresh_token=create_refresh_token(db, user))
+
+
+@router.get("/telegram/widget")
+def telegram_widget_config() -> dict:
+    return {
+        "enabled": bool(settings.telegram_bot_username),
+        "bot_username": settings.telegram_bot_username,
+    }
 
 
 @router.post("/google", response_model=TokenPair)
@@ -107,4 +115,4 @@ def dev_login(payload: DevLoginIn, db: Session = Depends(get_db)) -> TokenPair:
 
 @router.get("/me")
 def me(user: User = Depends(get_current_user)) -> dict:
-    return {"id": user.id, "email": user.email, "telegram_id": user.telegram_id}
+    return {"id": user.id, "email": user.email, "telegram_id": user.telegram_id, "is_admin": is_admin_user(user)}

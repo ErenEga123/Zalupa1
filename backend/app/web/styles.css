@@ -74,6 +74,9 @@ main {
   gap: 8px;
   margin-bottom: 10px;
 }
+.telegram-login {
+  margin-bottom: 12px;
+}
 #upload-form {
   display: grid;
   gap: 8px;
@@ -91,8 +94,7 @@ button.secondary {
   background: #e9f4f6;
   color: #114149;
 }
-input,
-select {
+input {
   border-radius: 6px;
   border: 1px solid #c7b79f;
   padding: 8px;

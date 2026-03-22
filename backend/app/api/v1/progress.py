@@ -1,4 +1,4 @@
-﻿from datetime import timezone
+﻿from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -14,21 +14,29 @@ from app.schemas.progress import ProgressIn, ProgressOut
 router = APIRouter()
 
 
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 @router.post("", response_model=ProgressOut)
 def upsert_progress(payload: ProgressIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> ProgressOut:
-    incoming_ts = payload.updated_at.astimezone(timezone.utc)
+    incoming_ts = _as_utc(payload.updated_at)
     existing = db.scalar(select(Progress).where(Progress.user_id == user.id, Progress.book_id == payload.book_id))
 
-    if existing and existing.updated_at >= incoming_ts:
-        return ProgressOut(
-            accepted=False,
-            server_progress={
-                "book_id": existing.book_id,
-                "chapter_id": existing.chapter_id,
-                "position": existing.position,
-                "updated_at": existing.updated_at.isoformat(),
-            },
-        )
+    if existing:
+        existing_ts = _as_utc(existing.updated_at)
+        if existing_ts >= incoming_ts:
+            return ProgressOut(
+                accepted=False,
+                server_progress={
+                    "book_id": existing.book_id,
+                    "chapter_id": existing.chapter_id,
+                    "position": existing.position,
+                    "updated_at": existing_ts.isoformat(),
+                },
+            )
 
     if not existing:
         existing = Progress(user_id=user.id, book_id=payload.book_id)
@@ -45,7 +53,7 @@ def upsert_progress(payload: ProgressIn, db: Session = Depends(get_db), user: Us
             "book_id": existing.book_id,
             "chapter_id": existing.chapter_id,
             "position": existing.position,
-            "updated_at": existing.updated_at.isoformat(),
+            "updated_at": _as_utc(existing.updated_at).isoformat(),
         },
     )
 
@@ -59,5 +67,5 @@ def get_progress(book_id: str, db: Session = Depends(get_db), user: User = Depen
         "book_id": book_id,
         "chapter_id": row.chapter_id,
         "position": row.position,
-        "updated_at": row.updated_at.isoformat(),
+        "updated_at": _as_utc(row.updated_at).isoformat(),
     }
