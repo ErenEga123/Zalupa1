@@ -2,6 +2,13 @@
 const DB_VERSION = 1;
 const TOKEN_KEY = 'readerToken';
 
+const PAGE_TITLES = {
+  'library-page': 'Library',
+  'reader-page': 'Reader',
+  'add-page': 'Add',
+  'profile-page': 'Profile',
+};
+
 const state = {
   token: localStorage.getItem(TOKEN_KEY),
   currentBookId: null,
@@ -68,6 +75,20 @@ function setStatus(text) {
   document.getElementById('sync-status').textContent = text;
 }
 
+function setPageTitle(pageId) {
+  document.getElementById('page-title').textContent = PAGE_TITLES[pageId] || 'Reader System';
+}
+
+function switchPage(pageId) {
+  document.querySelectorAll('.page').forEach((page) => {
+    page.classList.toggle('active', page.id === pageId);
+  });
+  document.querySelectorAll('[data-page]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.page === pageId);
+  });
+  setPageTitle(pageId);
+}
+
 function authHeaders() {
   return state.token ? { Authorization: `Bearer ${state.token}` } : {};
 }
@@ -75,6 +96,21 @@ function authHeaders() {
 function setToken(accessToken) {
   state.token = accessToken;
   localStorage.setItem(TOKEN_KEY, accessToken);
+}
+
+async function refreshProfileInfo() {
+  const block = document.getElementById('profile-info');
+  if (!state.token) {
+    block.textContent = 'Not authenticated';
+    return;
+  }
+  const resp = await fetch('/api/v1/users/me', { headers: authHeaders() });
+  if (!resp.ok) {
+    block.textContent = 'Auth token invalid';
+    return;
+  }
+  const me = await resp.json();
+  block.textContent = `User: ${me.email || '-'} | Telegram: ${me.telegram_id || '-'}${me.is_admin ? ' | admin' : ''}`;
 }
 
 async function authMagic() {
@@ -106,7 +142,9 @@ async function authDevLogin() {
   const data = await resp.json();
   setToken(data.access_token);
   setStatus('Logged in');
+  await refreshProfileInfo();
   await fetchLibrary();
+  switchPage('library-page');
 }
 
 async function authTelegramUser(user) {
@@ -129,7 +167,9 @@ async function authTelegramUser(user) {
   const data = await resp.json();
   setToken(data.access_token);
   setStatus('Logged in via Telegram');
+  await refreshProfileInfo();
   await fetchLibrary();
+  switchPage('library-page');
 }
 
 async function renderTelegramWidget() {
@@ -174,6 +214,7 @@ async function applyTokenFromUrl() {
   if (!resp.ok) return;
   const data = await resp.json();
   setToken(data.access_token);
+  await refreshProfileInfo();
   history.replaceState({}, '', '/app');
 }
 
@@ -191,14 +232,27 @@ async function fetchLibrary() {
 }
 
 function renderLibrary(items) {
-  const container = document.getElementById('library-list');
+  const container = document.getElementById('library-grid');
   container.innerHTML = '';
+
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'book-meta';
+    empty.textContent = 'No books yet. Go to Add tab and upload a file.';
+    container.appendChild(empty);
+    return;
+  }
+
   items.forEach((book) => {
-    const row = document.createElement('div');
-    row.className = 'book-row';
-    row.innerHTML = `<button data-id="${book.id}">${book.title}</button><span>${book.author}</span><span>${book.status}</span>`;
-    row.querySelector('button').addEventListener('click', () => openBook(book.id));
-    container.appendChild(row);
+    const card = document.createElement('article');
+    card.className = 'book-card';
+    card.innerHTML = `
+      <button class="book-open" data-id="${book.id}">${book.title}</button>
+      <div class="book-meta">${book.author || 'Unknown author'}</div>
+      <div class="book-meta">${book.file_type.toUpperCase()} • ${book.status} • ${book.visibility}</div>
+    `;
+    card.querySelector('.book-open').addEventListener('click', () => openBook(book.id, book.title));
+    container.appendChild(card);
   });
 }
 
@@ -238,16 +292,18 @@ async function uploadBookFromSite(event) {
   setStatus(result.duplicate ? 'Duplicate reused' : 'Uploaded and queued');
   fileInput.value = '';
   await fetchLibrary();
-  window.setTimeout(fetchLibrary, 3000);
+  switchPage('library-page');
+  window.setTimeout(fetchLibrary, 2500);
 }
 
-async function openBook(bookId) {
+async function openBook(bookId, titleHint = 'Reader') {
   state.currentBookId = bookId;
   localStorage.setItem('lastBookId', bookId);
+  document.getElementById('reader-book-title').textContent = titleHint || 'Reader';
+
   setStatus('Loading chapters...');
   let chapters = [];
-  const online = navigator.onLine;
-  if (online) {
+  if (navigator.onLine) {
     const resp = await fetch(`/api/v1/books/${bookId}/chapters`, { headers: authHeaders() });
     if (resp.ok) {
       chapters = await resp.json();
@@ -270,13 +326,14 @@ async function openBook(bookId) {
 
   state.chapters = chapters.sort((a, b) => a.order_index - b.order_index);
   if (!state.chapters.length) {
-    setStatus('No chapters found (processing still running?)');
+    setStatus('No chapters found (processing may still be running)');
     return;
   }
 
   const saved = await idbGet('progress', bookId);
   const startChapter = saved?.chapter_id || state.chapters[0].id;
   await openChapter(startChapter);
+  switchPage('reader-page');
   setStatus('Ready');
 }
 
@@ -303,6 +360,7 @@ async function openChapter(chapterId) {
 
   const content = document.getElementById('reader-content');
   content.innerHTML = chapter.content;
+  document.getElementById('reader-meta').textContent = `${chapter.title} • ${chapter.chapter_type}`;
 
   const progress = await idbGet('progress', state.currentBookId);
   if (progress && progress.chapter_id === chapterId && progress.position > 0) {
@@ -365,9 +423,15 @@ async function flushProgressQueue() {
 }
 
 function bindControls() {
+  document.querySelectorAll('[data-page]').forEach((node) => {
+    node.addEventListener('click', () => switchPage(node.dataset.page));
+  });
+
+  document.getElementById('refresh-library').addEventListener('click', fetchLibrary);
   document.getElementById('send-magic').addEventListener('click', authMagic);
   document.getElementById('dev-login').addEventListener('click', authDevLogin);
   document.getElementById('upload-form').addEventListener('submit', uploadBookFromSite);
+
   document.getElementById('reader-content').addEventListener('scroll', () => {
     window.clearTimeout(window.__saveTimer);
     window.__saveTimer = setTimeout(saveProgress, 300);
@@ -394,13 +458,17 @@ async function init() {
   if ('serviceWorker' in navigator) {
     await navigator.serviceWorker.register('/sw.js');
   }
+  bindControls();
   await applyTokenFromUrl();
   await renderTelegramWidget();
-  bindControls();
+  await refreshProfileInfo();
+
   if (state.token) {
     await fetchLibrary();
     const lastBook = localStorage.getItem('lastBookId');
-    if (lastBook) await openBook(lastBook);
+    if (lastBook) await openBook(lastBook, 'Continue Reading');
+  } else {
+    renderLibrary([]);
   }
 }
 

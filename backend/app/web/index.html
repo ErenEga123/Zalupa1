@@ -9,38 +9,80 @@
     <title>Reader System</title>
   </head>
   <body>
-    <header>
-      <h1>Reader System</h1>
-      <span id="sync-status">Idle</span>
-    </header>
-    <main>
-      <section class="panel">
-        <h2>Profile / Auth</h2>
-        <input id="email" placeholder="you@example.com" />
-        <div class="stack-actions">
-          <button id="send-magic">Send Magic Link</button>
-          <button id="dev-login" class="secondary">Dev Login</button>
-        </div>
-        <div id="telegram-login" class="telegram-login"></div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="logo">Reader System</div>
+        <nav class="nav-links">
+          <button class="nav-link active" data-page="library-page">Library</button>
+          <button class="nav-link" data-page="reader-page">Reader</button>
+          <button class="nav-link" data-page="add-page">Add</button>
+          <button class="nav-link" data-page="profile-page">Profile</button>
+        </nav>
+      </aside>
 
-        <h2>Add Book</h2>
-        <form id="upload-form">
-          <input id="upload-file" type="file" accept=".epub,.fb2,.pdf" required />
-          <button type="submit">Upload Book</button>
-        </form>
+      <div class="main-area">
+        <header class="topbar">
+          <h1 id="page-title">Library</h1>
+          <span id="sync-status">Idle</span>
+        </header>
 
-        <h2>Library</h2>
-        <div id="library-list"></div>
-      </section>
-      <section class="panel">
-        <h2>Reader</h2>
-        <div id="reader-content"></div>
-        <div class="reader-controls">
-          <button id="prev">Prev</button>
-          <button id="next">Next</button>
-        </div>
-      </section>
-    </main>
+        <main class="content-area">
+          <section id="library-page" class="page active">
+            <div class="page-head">
+              <h2>My Library</h2>
+              <button id="refresh-library" class="secondary small">Refresh</button>
+            </div>
+            <div id="library-grid" class="library-grid"></div>
+          </section>
+
+          <section id="reader-page" class="page">
+            <div class="reader-shell">
+              <div class="reader-head">
+                <h2 id="reader-book-title">Reader</h2>
+                <span id="reader-meta">Choose a book from library</span>
+              </div>
+              <div id="reader-content"></div>
+              <div class="reader-controls">
+                <button id="prev">Prev</button>
+                <button id="next">Next</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="add-page" class="page">
+            <div class="panel-card">
+              <h2>Add Book</h2>
+              <form id="upload-form" class="upload-form">
+                <input id="upload-file" type="file" accept=".epub,.fb2,.pdf" required />
+                <button type="submit">Upload Book</button>
+              </form>
+              <p class="muted">Title/author/series are taken from embedded metadata automatically.</p>
+            </div>
+          </section>
+
+          <section id="profile-page" class="page">
+            <div class="panel-card">
+              <h2>Profile / Auth</h2>
+              <input id="email" placeholder="you@example.com" />
+              <div class="stack-actions">
+                <button id="send-magic">Send Magic Link</button>
+                <button id="dev-login" class="secondary">Dev Login</button>
+              </div>
+              <div id="telegram-login" class="telegram-login"></div>
+              <div id="profile-info" class="profile-info">Not authenticated</div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <nav class="mobile-nav">
+      <button class="mobile-nav-link active" data-page="library-page">Library</button>
+      <button class="mobile-nav-link" data-page="reader-page">Reader</button>
+      <button class="mobile-nav-link" data-page="add-page">Add</button>
+      <button class="mobile-nav-link" data-page="profile-page">Profile</button>
+    </nav>
+
     <script src="/app/app.js"></script>
   </body>
 </html>
