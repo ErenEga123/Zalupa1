@@ -1,9 +1,10 @@
 ﻿import hashlib
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -12,6 +13,7 @@ from app.db.session import get_db
 from app.models.book import Book, BookFile, BookFileType, BookVisibility, Chapter, ProcessingStatus, ProcessingTask
 from app.models.user import User
 from app.schemas.books import BookCreateResult, ChapterContentOut, ChapterOut
+from app.services.metadata_service import extract_metadata
 from app.services.storage_service import get_book_paths
 
 
@@ -25,10 +27,10 @@ def _can_access(book: Book, user: User) -> bool:
 
 @router.post("/upload", response_model=BookCreateResult)
 async def upload_book(
-    title: str,
-    author: str = "Unknown",
-    series: str | None = None,
-    visibility: str = "private",
+    title: str = Form(...),
+    author: str = Form("Unknown"),
+    series: str | None = Form(None),
+    visibility: str = Form("private"),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -38,8 +40,8 @@ async def upload_book(
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
     max_size = settings.max_book_size_mb * 1024 * 1024
-    book_id = __import__("uuid").uuid4().hex
-    tmp = settings.temp_root / f"upload_{book_id}.{suffix}"
+    upload_tmp_id = __import__("uuid").uuid4().hex
+    tmp = settings.temp_root / f"upload_{upload_tmp_id}.{suffix}"
     hasher = hashlib.sha256()
     total_size = 0
 
@@ -55,6 +57,11 @@ async def upload_book(
             hasher.update(chunk)
             out.write(chunk)
 
+    parsed = extract_metadata(tmp, suffix)
+    resolved_title = (parsed.title or title or Path(file.filename or "").stem or "Untitled").strip()
+    resolved_author = (parsed.author or author or "Unknown").strip()
+    resolved_series = (parsed.series or series or "").strip() or None
+
     sha256 = hasher.hexdigest()
     existing = db.scalar(select(BookFile).where(BookFile.sha256 == sha256))
     if existing:
@@ -67,9 +74,9 @@ async def upload_book(
     file_type = BookFileType[suffix]
     book = Book(
         id=book_uuid,
-        title=title,
-        author=author,
-        series=series,
+        title=resolved_title,
+        author=resolved_author,
+        series=resolved_series,
         file_type=file_type,
         visibility=BookVisibility(visibility if visibility in {"private", "shared"} else "private"),
         owner_id=user.id,
@@ -79,7 +86,7 @@ async def upload_book(
 
     original_path, processed_root, _ = get_book_paths(book_uuid, suffix)
     original_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp.replace(original_path)
+    shutil.move(str(tmp), str(original_path))
 
     db.add(
         BookFile(
@@ -160,10 +167,11 @@ def download_original(book_id: str, db: Session = Depends(get_db), user: User = 
     path = Path(book_file.original_path)
     return FileResponse(path, media_type="application/octet-stream", filename=path.name)
 
+
 @router.get("/{book_id}/cover")
-def get_cover(book_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def get_cover(book_id: str, db: Session = Depends(get_db)):
     book = db.get(Book, book_id)
-    if not book or not _can_access(book, user):
+    if not book or book.visibility != BookVisibility.shared:
         raise HTTPException(status_code=404, detail="Book not found")
     if not book.cover_path:
         raise HTTPException(status_code=404, detail="Cover not found")
@@ -171,4 +179,3 @@ def get_cover(book_id: str, db: Session = Depends(get_db), user: User = Depends(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Cover file missing")
     return FileResponse(path, media_type="image/jpeg", filename=f"{book_id}.jpg")
-

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     bot_token: str = ""
     bot_api_token: str = ""
+    bot_service_email: str = "bot-service@local"
     backend_base_url: str = "http://backend:8000"
     telegram_bot_username: str = ""
 
@@ -58,7 +59,5 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-
 def get_settings() -> Settings:
     return Settings()
-

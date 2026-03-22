@@ -14,7 +14,6 @@ $loginBody = @{ email = $Email } | ConvertTo-Json
 $tokens = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/auth/dev/login" -ContentType "application/json" -Body $loginBody
 $access = $tokens.access_token
 if (-not $access) { throw "No access token" }
-$headers = @{ Authorization = "Bearer $access" }
 
 Write-Host "[3/6] Prepare FB2 file..."
 $tmp = Join-Path $env:TEMP "reader_smoke.fb2"
@@ -30,10 +29,11 @@ $tmp = Join-Path $env:TEMP "reader_smoke.fb2"
 "@ | Set-Content -Encoding UTF8 $tmp
 
 Write-Host "[4/6] Upload via API..."
-$form = @{ title = "Smoke Book"; author = "Smoke"; visibility = "private"; file = Get-Item $tmp }
-$upload = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/books/upload" -Headers $headers -Form $form
+$uploadJson = curl.exe -sS -X POST "$BaseUrl/api/v1/books/upload" -H "Authorization: Bearer $access" -F "title=Smoke Book" -F "author=Smoke" -F "visibility=private" -F "file=@$tmp"
+$upload = $uploadJson | ConvertFrom-Json
 $bookId = $upload.book_id
-if (-not $bookId) { throw "Upload failed" }
+if (-not $bookId) { throw "Upload failed: $uploadJson" }
+$headers = @{ Authorization = "Bearer $access" }
 
 Write-Host "[5/6] Wait for processing..."
 $ready = $false

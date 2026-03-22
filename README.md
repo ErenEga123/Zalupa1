@@ -161,3 +161,37 @@ PowerShell smoke-check against SQLite mode:
 ```
 
 This mode is for local verification only. Production should stay on PostgreSQL.
+
+## Как заполнить .env
+
+### Для локального SQLite теста (быстрый старт)
+
+Минимум:
+- `APP_ENV=dev`
+- `JWT_SECRET=<длинный_секрет>`
+- `BOT_API_TOKEN=<любой_длинный_секрет_для_локали>`
+- `BOT_SERVICE_EMAIL=bot-service@local`
+
+Остальные можно оставить как в `.env.example`.
+В SQLite режиме `DATABASE_URL` из `.env` не используется, потому что `backend_sqlite` переопределяет его на `sqlite+pysqlite:////data/temp/reader-test.db`.
+
+### Для обычного compose c Postgres
+
+Обязательно заполнить:
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL=postgresql+psycopg://<user>:<pass>@postgres:5432/<db>`
+- `JWT_SECRET`
+
+### Для Telegram бота
+
+- `BOT_TOKEN` — токен из BotFather
+- `BOT_API_TOKEN` — сервисный токен для backend (тот же, что использует bot)
+- `BOT_SERVICE_EMAIL` — сервисный пользователь backend для bot API вызовов
+
+### Для email/google auth (по желанию)
+
+Заполняется только если реально используешь эти способы входа:
+- Google: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`
+- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`

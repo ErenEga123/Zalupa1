@@ -214,7 +214,7 @@ async function openBook(bookId) {
 
   if (chapters.length === 0) {
     const cached = await idbGetAll('chapters');
-    const filtered = cached.filter((x) => x.key.startsWith(`${bookId}:`)).map((x) => x.value);
+    const filtered = cached.filter((x) => x.key.startsWith(`${bookId}:`)).map((x) => x.value ?? x).filter(Boolean);
     chapters = filtered.map((f) => ({ id: f.id, title: f.title, order_index: f.order_index, chapter_type: f.chapter_type }));
   }
 
@@ -234,15 +234,19 @@ async function openChapter(chapterId) {
   state.currentChapterId = chapterId;
   localStorage.setItem('lastChapterId', String(chapterId));
   const key = `${state.currentBookId}:${chapterId}`;
-  let chapter = await idbGet('chapters', key);
-  if (!chapter && navigator.onLine) {
+
+  const chapterRecord = await idbGet('chapters', key);
+  let chapter = chapterRecord?.value ?? chapterRecord;
+
+  if ((!chapter || typeof chapter.content !== 'string') && navigator.onLine) {
     const resp = await fetch(`/api/v1/books/${state.currentBookId}/chapter/${chapterId}`, { headers: authHeaders() });
     if (resp.ok) {
       chapter = await resp.json();
       await idbPut('chapters', { key, value: chapter });
     }
   }
-  if (!chapter) {
+
+  if (!chapter || typeof chapter.content !== 'string') {
     setStatus('Chapter unavailable offline');
     return;
   }
