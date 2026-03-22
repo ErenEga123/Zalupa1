@@ -93,9 +93,51 @@ function authHeaders() {
   return state.token ? { Authorization: `Bearer ${state.token}` } : {};
 }
 
+function clearToken() {
+  state.token = null;
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 function setToken(accessToken) {
   state.token = accessToken;
   localStorage.setItem(TOKEN_KEY, accessToken);
+}
+
+async function parseErrorMessage(resp) {
+  try {
+    const data = await resp.json();
+    if (typeof data?.detail === 'string') return data.detail;
+    if (data?.detail) return JSON.stringify(data.detail);
+    return JSON.stringify(data);
+  } catch {
+    try {
+      return (await resp.text()) || `HTTP ${resp.status}`;
+    } catch {
+      return `HTTP ${resp.status}`;
+    }
+  }
+}
+
+async function handleAuthFailure(resp) {
+  if (resp.status !== 401) return false;
+  clearToken();
+  await refreshProfileInfo();
+  setStatus('Session expired. Login again.');
+  switchPage('profile-page');
+  return true;
+}
+
+async function apiFetch(url, options = {}, requiresAuth = false) {
+  const headers = new Headers(options.headers || {});
+  if (requiresAuth && state.token) {
+    headers.set('Authorization', `Bearer ${state.token}`);
+  }
+
+  const resp = await fetch(url, { ...options, headers });
+  if (requiresAuth) {
+    await handleAuthFailure(resp);
+  }
+  return resp;
 }
 
 async function refreshProfileInfo() {
@@ -104,11 +146,19 @@ async function refreshProfileInfo() {
     block.textContent = 'Not authenticated';
     return;
   }
+
   const resp = await fetch('/api/v1/users/me', { headers: authHeaders() });
-  if (!resp.ok) {
-    block.textContent = 'Auth token invalid';
+  if (resp.status === 401) {
+    clearToken();
+    block.textContent = 'Session expired. Login again.';
     return;
   }
+
+  if (!resp.ok) {
+    block.textContent = 'Auth check failed';
+    return;
+  }
+
   const me = await resp.json();
   block.textContent = `User: ${me.email || '-'} | Telegram: ${me.telegram_id || '-'}${me.is_admin ? ' | admin' : ''}`;
 }
@@ -219,7 +269,8 @@ async function applyTokenFromUrl() {
 }
 
 async function fetchLibrary() {
-  const resp = await fetch('/api/v1/library?page=1&page_size=50', { headers: authHeaders() });
+  const resp = await apiFetch('/api/v1/library?page=1&page_size=50', {}, true);
+  if (resp.status === 401) return;
   if (!resp.ok) {
     const offlineBooks = await idbGetAll('books');
     renderLibrary(offlineBooks.map((b) => ({ ...b, status: b.status || 'cached' })));
@@ -261,6 +312,7 @@ async function uploadBookFromSite(event) {
 
   if (!state.token) {
     alert('Login first');
+    switchPage('profile-page');
     return;
   }
 
@@ -275,16 +327,20 @@ async function uploadBookFromSite(event) {
   form.append('file', file);
 
   setStatus('Uploading book...');
-  const resp = await fetch('/api/v1/books/upload', {
+  const resp = await apiFetch('/api/v1/books/upload', {
     method: 'POST',
-    headers: authHeaders(),
     body: form,
-  });
+  }, true);
+
+  if (resp.status === 401) {
+    alert('Session expired. Login again and retry upload.');
+    return;
+  }
 
   if (!resp.ok) {
-    const txt = await resp.text();
+    const msg = await parseErrorMessage(resp);
     setStatus('Upload failed');
-    alert(`Upload failed: ${txt}`);
+    alert(`Upload failed: ${msg}`);
     return;
   }
 
@@ -304,12 +360,14 @@ async function openBook(bookId, titleHint = 'Reader') {
   setStatus('Loading chapters...');
   let chapters = [];
   if (navigator.onLine) {
-    const resp = await fetch(`/api/v1/books/${bookId}/chapters`, { headers: authHeaders() });
+    const resp = await apiFetch(`/api/v1/books/${bookId}/chapters`, {}, true);
+    if (resp.status === 401) return;
     if (resp.ok) {
       chapters = await resp.json();
       await idbPut('books', { ...(await idbGet('books', bookId)), id: bookId, chapters_indexed: true });
       for (const chapter of chapters) {
-        const cResp = await fetch(`/api/v1/books/${bookId}/chapter/${chapter.id}`, { headers: authHeaders() });
+        const cResp = await apiFetch(`/api/v1/books/${bookId}/chapter/${chapter.id}`, {}, true);
+        if (cResp.status === 401) return;
         if (cResp.ok) {
           const detail = await cResp.json();
           await idbPut('chapters', { key: `${bookId}:${chapter.id}`, value: detail });
@@ -346,7 +404,8 @@ async function openChapter(chapterId) {
   let chapter = chapterRecord?.value ?? chapterRecord;
 
   if ((!chapter || typeof chapter.content !== 'string') && navigator.onLine) {
-    const resp = await fetch(`/api/v1/books/${state.currentBookId}/chapter/${chapterId}`, { headers: authHeaders() });
+    const resp = await apiFetch(`/api/v1/books/${state.currentBookId}/chapter/${chapterId}`, {}, true);
+    if (resp.status === 401) return;
     if (resp.ok) {
       chapter = await resp.json();
       await idbPut('chapters', { key, value: chapter });
@@ -376,7 +435,8 @@ async function preloadNeighbors(prevId, nextId) {
     const key = `${state.currentBookId}:${id}`;
     const exists = await idbGet('chapters', key);
     if (exists) continue;
-    const resp = await fetch(`/api/v1/books/${state.currentBookId}/chapter/${id}`, { headers: authHeaders() });
+    const resp = await apiFetch(`/api/v1/books/${state.currentBookId}/chapter/${id}`, {}, true);
+    if (resp.status === 401) return;
     if (resp.ok) await idbPut('chapters', { key, value: await resp.json() });
   }
 }
@@ -402,12 +462,14 @@ async function flushProgressQueue() {
 
   setStatus(`Syncing ${pending.length} updates...`);
   for (const item of pending) {
-    const resp = await fetch('/api/v1/progress', {
+    const resp = await apiFetch('/api/v1/progress', {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
-    });
+    }, true);
+    if (resp.status === 401) return;
     if (!resp.ok) continue;
+
     const result = await resp.json();
     if (!result.accepted && result.server_progress) {
       await idbPut('progress', {
